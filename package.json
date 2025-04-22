@@ -1,0 +1,31 @@
+{
+  "name": "nodegross",
+  "version": "1.0.0",
+  "description": "Dedicated cron job server for job application tracking system",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "cron",
+    "node",
+    "job-tracker",
+    "email"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.1",
+    "express": "^4.18.2",
+    "mongodb": "^6.3.0",
+    "multer": "^1.4.5-lts.2",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.8"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
