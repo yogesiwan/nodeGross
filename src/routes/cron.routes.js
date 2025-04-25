@@ -41,4 +41,10 @@ router.get('/resume/download', cronController.downloadResume);
 // DELETE /api/cron/resume - Delete all resume files
 router.delete('/resume', cronController.deleteResume);
 
+// POST /api/cron/logs - Store incoming logs
+router.post('/logs', cronController.takeLogs);
+
+// GET /api/cron/logs - Retrieve stored logs
+router.get('/logs', cronController.getLogs);
+
 module.exports = router; 

@@ -1,5 +1,11 @@
+const fs = require('fs').promises;
 const path = require('path');
-const fs = require('fs');
+const os = require('os');
+
+let lastLogActivity = Date.now();
+let logCleanupTimer = null;
+const LOG_CLEANUP_DELAY = 2 * 60 * 1000; // 5 minutes in milliseconds
+const tempLogFile = path.join(os.tmpdir(), 'application-logs-temp.txt');
 
 // Import template model
 const {
@@ -114,6 +120,9 @@ async function runJobNow(req, res) {
 /**
  * Send a test email
  */
+
+
+
 async function sendTestEmail(req, res) {
   try {
     const { email } = req.body;
@@ -364,6 +373,155 @@ async function deleteResume(req, res) {
   }
 }
 
+
+/**
+ * Store incoming logs in a temporary file
+ */
+async function takeLogs(req, res) {
+  try {
+    const { message, timestamp } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({
+        success: false,
+        message: 'Log message is required'
+      });
+    }
+    
+    // Format the log entry with timestamp
+    const logTime = timestamp ? new Date(timestamp * 1000).toISOString() : new Date().toISOString();
+    const logEntry = `[${logTime}] ${message}\n`;
+    
+    // Append to temp file
+    await fs.appendFile(tempLogFile, logEntry);
+    
+    // Update last activity time
+    lastLogActivity = Date.now();
+    
+    // Set up cleanup timer if not already running
+    if (!logCleanupTimer) {
+      logCleanupTimer = setTimeout(cleanupLogFile, LOG_CLEANUP_DELAY);
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: 'Log stored successfully'
+    });
+  } catch (error) {
+    console.error('Error storing log:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to store log',
+      error: error.message
+    });
+  }
+}
+
+/**
+ * Retrieve all logs from the temporary file
+ */
+/**
+ * Retrieve logs from the temporary file with pagination and "tail" support
+ */
+async function getLogs(req, res) {
+  try {
+    // Check if log file exists
+    try {
+      await fs.access(tempLogFile);
+    } catch (error) {
+      // File doesn't exist
+      return res.status(200).json({
+        success: true,
+        logs: [],
+        total: 0,
+        message: 'No logs available'
+      });
+    }
+    
+    // Reset the cleanup timer since there's activity
+    lastLogActivity = Date.now();
+    if (logCleanupTimer) {
+      clearTimeout(logCleanupTimer);
+      logCleanupTimer = setTimeout(cleanupLogFile, LOG_CLEANUP_DELAY);
+    }
+    
+    // Parse pagination parameters
+    const limit = parseInt(req.query.limit) || 100; // Default 100 lines
+    const page = parseInt(req.query.page) || 1;
+    const tail = req.query.tail === 'true'; // If true, return the most recent logs
+    const since = req.query.since ? parseInt(req.query.since) : null; // Timestamp to get logs after a certain point
+    
+    // Read log file
+    const fileContent = await fs.readFile(tempLogFile, 'utf8');
+    const allLogLines = fileContent.split('\n').filter(line => line.trim()); // Filter empty lines
+    const total = allLogLines.length;
+    
+    let resultLogs = [];
+    
+    if (since) {
+      // Get only logs newer than the specified timestamp
+      resultLogs = allLogLines.filter(line => {
+        try {
+          const timestampMatch = line.match(/\[(.*?)\]/);
+          if (timestampMatch) {
+            const logDate = new Date(timestampMatch[1]);
+            return logDate.getTime() > since;
+          }
+          return false;
+        } catch (e) {
+          return false;
+        }
+      });
+    } else if (tail) {
+      // Get the most recent logs based on limit
+      resultLogs = allLogLines.slice(-limit);
+    } else {
+      // Paginate logs
+      const start = (page - 1) * limit;
+      resultLogs = allLogLines.slice(start, start + limit);
+    }
+    
+    res.status(200).json({
+      success: true,
+      logs: resultLogs,
+      total,
+      page: tail ? null : page,
+      limit,
+      hasMore: !tail && page * limit < total
+    });
+  } catch (error) {
+    console.error('Error retrieving logs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve logs',
+      error: error.message
+    });
+  }
+}
+
+async function cleanupLogFile() {
+  const currentTime = Date.now();
+  const timeSinceLastActivity = currentTime - lastLogActivity;
+  
+  // If no activity for cleanup delay, delete the file
+  if (timeSinceLastActivity >= LOG_CLEANUP_DELAY) {
+    try {
+      await fs.unlink(tempLogFile);
+    } catch (error) {
+      // File might not exist or other error
+      console.error('Error cleaning up log file:', error);
+    } finally {
+      logCleanupTimer = null;
+    }
+  } else {
+    // If there was activity, reschedule
+    const remainingTime = LOG_CLEANUP_DELAY - timeSinceLastActivity;
+    logCleanupTimer = setTimeout(cleanupLogFile, remainingTime);
+  }
+}
+
+
+
 module.exports = {
   getCronStatus,
   scheduleJob,
@@ -375,5 +533,7 @@ module.exports = {
   uploadResume,
   getResume,
   downloadResume,
-  deleteResume
+  deleteResume,
+  takeLogs,  // Add this
+  getLogs    // Add this
 };
