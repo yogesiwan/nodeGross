@@ -23,7 +23,10 @@ async function findJobsWithEmails(date) {
     
     // Find jobs with non-empty send_to field
     const jobs = await collection
-      .find({ send_to: { $ne: null, $exists: true } })
+      .find({ 
+          send_to: { $ne: null, $exists: true }, 
+          grade: { $gte: 500 }     
+        })
       .toArray();
     
     console.log(`🔍 Found ${jobs.length} potential jobs with send_to fields for date ${date}`);
